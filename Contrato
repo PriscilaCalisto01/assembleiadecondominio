@@ -1,65 +1,97 @@
-pragma solidity >=0.4.22 <0.6.0;
-contract Ballot {
 
-    struct Voter {
-        uint weight;
-        bool voted;
-        uint8 vote;
-        address delegate;
+pragma  solidity 0.4.25;
+contract AssembleiaGeralSocios {
+    struct Proposta {
+        string texto;
+        address proponente;
+        uint quotaDeVotos;
+        uint quotaMinimaParaAprovacao;
+        bool existe;
     }
-    struct Proposal {
-        uint voteCount;
+    struct Votante {
+        address conta;
+        uint quotaDeVotos;
+        bool votou;
+        bool existe;
     }
-
-    address chairperson;
-    mapping(address => Voter) voters;
-    Proposal[] proposals;
-
-    /// Create a new ballot with $(_numProposals) different proposals.
-    constructor(uint8 _numProposals) public {
-        chairperson = msg.sender;
-        voters[chairperson].weight = 1;
-        proposals.length = _numProposals;
+    modifier somenteChairman() {
+        require(chairman == msg.sender, "Só o Chairmain pode realizar essa operação");
+        _;
     }
-
-    /// Give $(toVoter) the right to vote on this ballot.
-    /// May only be called by $(chairperson).
-    function giveRightToVote(address toVoter) public {
-        if (msg.sender != chairperson || voters[toVoter].voted) return;
-        voters[toVoter].weight = 1;
+    //Informações gerais da Assembleia
+    Proposta[] propostas;
+    mapping (address =>Votante) votantes;
+    address chairman;
+    uint dataInicioVotacao;
+    uint dataFimVotacao;
+    string anoExercicio;
+    constructor (string qualAnoExercicio, uint qualDataFimVotacao) public {
+        chairman = msg.sender;
+        dataFimVotacao = qualDataFimVotacao;
+        anoExercicio = qualAnoExercicio;
     }
-
-    /// Delegate your vote to the voter $(to).
-    function delegate(address to) public {
-        Voter storage sender = voters[msg.sender]; // assigns reference
-        if (sender.voted) return;
-        while (voters[to].delegate != address(0) && voters[to].delegate != msg.sender)
-            to = voters[to].delegate;
-        if (to == msg.sender) return;
-        sender.voted = true;
-        sender.delegate = to;
-        Voter storage delegateTo = voters[to];
-        if (delegateTo.voted)
-            proposals[delegateTo.vote].voteCount += sender.weight;
-        else
-            delegateTo.weight += sender.weight;
+    function incluiVotante(address enderecoVotante, uint quotaDeVotos) public somenteChairman {
+        require(quotaDeVotos <= 99, "Quota nao pode ser superior a 99%");
+        require(enderecoVotante != address(0), "O votante deve ter um endereco valido");
+        Votante memory novoVotante = Votante(enderecoVotante, quotaDeVotos, false, true);
+        votantes[enderecoVotante] = novoVotante;
     }
-
-    /// Give a single vote to proposal $(toProposal).
-    function vote(uint8 toProposal) public {
-        Voter storage sender = voters[msg.sender];
-        if (sender.voted || toProposal >= proposals.length) return;
-        sender.voted = true;
-        sender.vote = toProposal;
-        proposals[toProposal].voteCount += sender.weight;
+    function incluiProposta(string qualTextoDaProposta, address qualProponente, uint qualQuotaMinimaParaAprovacao) public somenteChairman {
+        Proposta memory novaProposta = Proposta(qualTextoDaProposta, qualProponente, 0, qualQuotaMinimaParaAprovacao, true);
+        propostas.push(novaProposta);
     }
-
-    function winningProposal() public view returns (uint8 _winningProposal) {
-        uint256 winningVoteCount = 0;
-        for (uint8 prop = 0; prop < proposals.length; prop++)
-            if (proposals[prop].voteCount > winningVoteCount) {
-                winningVoteCount = proposals[prop].voteCount;
-                _winningProposal = prop;
-            }
+    
+    function pesquisarVotante(address indiceVotante) public view returns (address, uint) {
+        Votante memory votanteTemporario = votantes[indiceVotante];
+        if (votanteTemporario.existe == true) {
+            return (votanteTemporario.conta, votanteTemporario.quotaDeVotos);
+        } else {
+            return (0,0);
+        }
     }
-}
+    function pesquisarProposta(uint numeroProposta) public view returns (string, address, uint, uint)  {
+        Proposta memory propostaTemporario = propostas[numeroProposta];
+        if (propostaTemporario.existe) {
+            return (propostaTemporario.texto, propostaTemporario.proponente, propostaTemporario.quotaDeVotos, propostaTemporario.quotaMinimaParaAprovacao);
+        } else {
+            return ("", 0, 0, 0);
+        }
+    }
+    function totalDePropostas() public view returns (uint) {
+        return propostas.length;
+    }
+    function qualAnoExercicio() public view returns (string) {
+        return anoExercicio;
+    }
+    function propostaAprovada(uint numeroProposta) public view returns (bool)  {
+        Proposta memory propostaTemporario = propostas[numeroProposta];
+        if (propostaTemporario.existe) {
+            return propostaTemporario.quotaDeVotos>=propostaTemporario.quotaMinimaParaAprovacao;
+        } else {
+            return false;
+        }
+    }
+    function quandoEncerraVotacao() public view returns (uint) {
+        return dataFimVotacao;
+    }
+    function votar(uint numeroProposta, bool favoravelAProposta) public returns (bool) {
+        require(dataFimVotacao>=now, "Votacao encerrada");
+        Proposta storage propostaTemporario = propostas[numeroProposta];
+        if (propostaTemporario.existe) {
+            Votante storage votanteTemporario = votantes[msg.sender];
+            if (votanteTemporario.existe == true) {
+                if (votanteTemporario.votou == false) {
+                    if (favoravelAProposta == true) {
+                        propostaTemporario.quotaDeVotos = propostaTemporario.quotaDeVotos + votanteTemporario.quotaDeVotos;
+                    }
+                    votanteTemporario.votou = true;
+                    return true;
+                } 
+            } 
+        } 
+        return false;
+    }
+} 
+   
+    
+    
